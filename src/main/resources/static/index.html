@@ -10,13 +10,24 @@
 <script>
     const socket = new SockJS('/ws');
     const stompClient = Stomp.over(socket);
-    stompClient.connect({}, function() {
+    stompClient.connect({}, function(frame) {
+        console.log('Connected: ' + frame);
         const urlParams = new URLSearchParams(window.location.search);
-        const orderId = urlParams.get('orderId') || '3f8a9c1d-xxxx'; // paste your orderId here
+        const orderId = urlParams.get('orderId');
+        if (!orderId) {
+            document.getElementById('status').innerHTML = '<h2>No orderId in URL</h2>';
+            return;
+        }
+        console.log('Subscribing to /topic/order/' + orderId);
         stompClient.subscribe('/topic/order/' + orderId, function(msg) {
-            document.getElementById('status').innerHTML =
-                '<h2>' + JSON.parse(msg.body).status + '</h2>';
+            console.log('Received message:', msg.body);
+            const update = JSON.parse(msg.body);
+            document.getElementById('status').innerHTML = '<h2>' + update.status + '</h2>';
         });
+        document.getElementById('status').innerHTML = '<h2>Connected - waiting for updates...</h2>';
+    }, function(error) {
+        console.error('STOMP error', error);
+        document.getElementById('status').innerHTML = '<h2>Connection failed</h2>';
     });
 </script>
 </body>
