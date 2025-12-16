@@ -62,84 +62,63 @@ services:
       timeout: 3s
       retries: 5
 
-  # Observability:
-  clickhouse:
-    image: clickhouse/clickhouse-server:24.1.2-alpine
-    container_name: clickhouse
-    hostname: clickhouse
-    volumes:
-      - ./clickhouse-config.xml:/etc/clickhouse-server/config.d/logging.xml:ro
-      - ./clickhouse-users.xml:/etc/clickhouse-server/users.d/logging.xml:ro
-      - clickhouse_data:/var/lib/clickhouse/
-    restart: on-failure
-    healthcheck:
-      test: [ "CMD-SHELL", "clickhouse-client --query='SELECT 1'" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    ulimits:
-      nproc: 65535
-      nofile:
-        soft: 262144
-        hard: 262144
-  otel-collector:
-    image: otel/opentelemetry-collector-contrib:0.102.1
-    container_name: otel-collector
-    command: [ "--config=/etc/otel-collector-config.yaml" ]
-    volumes:
-      - ./otel-collector-config.yml:/etc/otel-collector-config.yaml
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
     ports:
-      - "4317:4317"     # OTLP gRPC
-      - "4318:4318"     # OTLP HTTP
-    restart: on-failure
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:13133/" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-  query-service:
-    image: signoz/query-service:0.69.0
-    container_name: query-service
-    command: ["-config=/root/config/prometheus.yml"]
+      - "9090:9090"
     volumes:
-      - ./prometheus.yml:/root/config/prometheus.yml
-      - signoz_data:/var/lib/signoz/
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+  tempo:
+    image: grafana/tempo:latest
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo/tempo.yaml" ]
+    volumes:
+      - ./tempo.yaml:/etc/tempo/tempo.yaml
+    ports:
+      - "3200:3200"
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    ports:
+      - "3000:3000"
     environment:
-      - ClickHouseUrl=tcp://clickhouse:9000
-      - STORAGE=clickhouse
-      - GODEBUG=netdns=go
-      - TELEMETRY_ENABLED=true
-      - DEPLOYMENT_TYPE=docker-standalone-amd
-    restart: on-failure
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "localhost:8080/api/v1/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      clickhouse:
-        condition: service_healthy
-  frontend:
-    image: signoz/frontend:0.69.0
-    container_name: signoz-frontend
-    restart: on-failure
-    healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:3301/" ]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    depends_on:
-      query-service:
-        condition: service_healthy
-    ports:
-      - "3301:3301"
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
-      - ./nginx-config.conf:/etc/nginx/conf.d/default.conf
+      - grafana_data:/var/lib/grafana
+      - ./grafana-provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+  promtail:
+    image: grafana/promtail:latest
+    container_name: promtail
+    volumes:
+      - ./promtail-config.yml:/etc/promtail/config.yml
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/config.yml
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    command: [ "--config=/etc/otel-config.yaml" ]
+    volumes:
+      - ./otel-config.yaml:/etc/otel-config.yaml
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      - tempo
 
 volumes:
   kafka_data:
-  clickhouse_data:
-  signoz_data:
+  grafana_data:
