@@ -77,14 +77,16 @@ services:
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
-  tempo:
-    image: grafana/tempo:latest
-    container_name: tempo
-    command: [ "-config.file=/etc/tempo/tempo.yaml" ]
-    volumes:
-      - ./tempo.yaml:/etc/tempo/tempo.yaml
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
     ports:
-      - "3200:3200"
+      - "16686:16686"
+      - "4317:4317"
+      - "4318:4318"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    restart: unless-stopped
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -100,7 +102,7 @@ services:
     depends_on:
       - prometheus
       - loki
-      - tempo
+      - jaeger
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
@@ -110,14 +112,15 @@ services:
     command: -config.file=/etc/promtail/config.yml
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
-    command: [ "--config=/etc/otel-config.yaml" ]
+    container_name: otel-collector
+    command: [ "--config=/etc/otel-collector-config.yaml" ]
     volumes:
-      - ./otel-config.yaml:/etc/otel-config.yaml
+      - ./otel-collector-config.yaml:/etc/otel-collector-config.yaml
     ports:
-      - "4317:4317"
-      - "4318:4318"
+      - "5317:4317"
+      - "5318:4318"
     depends_on:
-      - tempo
+      - jaeger
 
 volumes:
   kafka_data:

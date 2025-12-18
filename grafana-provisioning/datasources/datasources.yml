@@ -12,7 +12,7 @@ datasources:
     url: http://loki:3100
     access: proxy
 
-  - name: Tempo
-    type: tempo
-    url: http://tempo:3200
+  - name: Jaeger
+    type: jaeger
+    url: http://jaeger:16686
     access: proxy
