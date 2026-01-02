@@ -2,7 +2,7 @@ package mk.ukim.finki.ds.orderingdistributedsystem.web;
 
 import lombok.RequiredArgsConstructor;
 import mk.ukim.finki.ds.orderingdistributedsystem.CreateOrderRequest;
-import mk.ukim.finki.ds.orderingdistributedsystem.OrderService;
+import mk.ukim.finki.ds.orderingdistributedsystem.service.OrderService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;

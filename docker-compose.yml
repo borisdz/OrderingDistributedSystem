@@ -28,6 +28,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - monitoring
+      - app-network
   postgres:
     image: postgres:16
     ports: [ "17111:5432" ]
@@ -40,28 +43,196 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-  mysql-us:
+    networks:
+      - app-network
+  
+  mysql-us-1:
     image: mysql:8
-    ports: [ "3306:3306" ]
     environment:
-      MYSQL_DATABASE: inventory_us
+      MYSQL_DATABASE: inventory_us_1
       MYSQL_USER: user
       MYSQL_PASSWORD: password
       MYSQL_ROOT_PASSWORD: root
     healthcheck:
-      test: [ "CMD-SHELL", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot" ]
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -proot"]
       interval: 10s
       timeout: 5s
       retries: 5
-  redis:
-    image: redis:7.4
-    ports: [ "6379:6379" ]
+    networks:
+      - app-network
+  mysql-us-2:
+    image: mysql:8
+    environment:
+      MYSQL_DATABASE: inventory_us_2
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: root
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
-      interval: 5s
-      timeout: 3s
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -proot"]
+      interval: 10s
+      timeout: 5s
       retries: 5
-
+    networks:
+      - app-network
+  mysql-eu:
+    image: mysql:8
+    ports: ["3307:3306"]
+    environment:
+      MYSQL_DATABASE: inventory_eu
+      MYSQL_USER: user
+      MYSQL_PASSWORD: password
+      MYSQL_ROOT_PASSWORD: root
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -proot"]
+      interval: 10s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+    networks:
+      - app-network
+  redis-us-1:
+    image: redis:7.4
+    ports: ["6380:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+  redis-us-2:
+    image: redis:7.4
+    ports: ["6381:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+  redis-eu-1:
+    image: redis:7.4
+    ports: ["6382:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+  redis-eu-2:
+    image: redis:7.4
+    ports: ["6383:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 30s
+      retries: 5
+  warehouse-us-1:
+    build: ../WarehouseDistributedSystem
+    container_name: warehouse-us-1
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-us-1:3306/inventory_us_1
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_REDIS_HOST: redis-us-1
+      SPRING_REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      WAREHOUSE_REGION: us-1
+      ORDER_TOPIC: order-placed.us
+    depends_on:
+      mysql-us-1:
+        condition: service_healthy
+      redis-us-1:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - monitoring
+      - app-network
+  warehouse-us-2:
+    build: ../WarehouseDistributedSystem
+    container_name: warehouse-us-2
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-us-2:3306/inventory_us_2
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_REDIS_HOST: redis-us-2
+      SPRING_REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      WAREHOUSE_REGION: us-2
+      ORDER_TOPIC: order-placed.us
+    depends_on:
+      mysql-us-2:
+        condition: service_healthy
+      redis-us-2:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - monitoring
+      - app-network
+  warehouse-eu-1:
+    build: ../WarehouseDistributedSystem
+    container_name: warehouse-eu-1
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-eu:3306/inventory_eu
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_REDIS_HOST: redis-eu-1
+      SPRING_REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      WAREHOUSE_REGION: eu-1
+      ORDER_TOPIC: order-placed.eu
+    depends_on:
+      mysql-eu:
+        condition: service_healthy
+      redis-eu-1:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - monitoring
+      - app-network
+  warehouse-eu-2:
+    build: ../WarehouseDistributedSystem
+    container_name: warehouse-eu-2
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-eu:3306/inventory_eu
+      SPRING_DATASOURCE_USERNAME: user
+      SPRING_DATASOURCE_PASSWORD: password
+      SPRING_REDIS_HOST: redis-eu-2
+      SPRING_REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9094
+      WAREHOUSE_REGION: eu-2
+      ORDER_TOPIC: order-placed.eu
+    depends_on:
+      mysql-eu:
+        condition: service_healthy
+      redis-eu-2:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - monitoring
+      - app-network
+  ordering-system:
+    build: .
+    container_name: ordering-system
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/orders
+      - SPRING_DATASOURCE_USERNAME=boris
+      - SPRING_DATASOURCE_PASSWORD=b17i19
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+      - OTEL_SERVICE_NAME=ordering-system
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      otel-collector:
+        condition: service_started
+    networks:
+      - monitoring
+      - app-network
+  
   prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
@@ -71,12 +242,16 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+    networks:
+      - app-network
   loki:
     image: grafana/loki:latest
     container_name: loki
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - app-network
   jaeger:
     image: jaegertracing/all-in-one:latest
     container_name: jaeger
@@ -87,6 +262,8 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     restart: unless-stopped
+    networks:
+      - app-network
   grafana:
     image: grafana/grafana:latest
     container_name: grafana
@@ -103,6 +280,8 @@ services:
       - prometheus
       - loki
       - jaeger
+    networks:
+      - app-network
   promtail:
     image: grafana/promtail:latest
     container_name: promtail
@@ -110,6 +289,8 @@ services:
       - ./promtail-config.yml:/etc/promtail/config.yml
       - /var/run/docker.sock:/var/run/docker.sock
     command: -config.file=/etc/promtail/config.yml
+    networks:
+      - app-network
   otel-collector:
     image: otel/opentelemetry-collector-contrib:latest
     container_name: otel-collector
@@ -121,7 +302,14 @@ services:
       - "5318:4318"
     depends_on:
       - jaeger
+    networks:
+      - app-network
 
 volumes:
   kafka_data:
   grafana_data:
+networks:
+  monitoring:
+    driver: bridge
+  app-network:
+    driver: bridge

@@ -6,13 +6,22 @@ datasources:
     url: http://prometheus:9090
     access: proxy
     isDefault: true
+    editable: true
 
   - name: Loki
     type: loki
     url: http://loki:3100
     access: proxy
+    editable: true
+    jsonData:
+      derivedFields:
+        - name: TraceID
+          matcherRegex: "trace=([a-f0-9]+)"
+          url: '$${__value.raw}'
+          datasourceUid: jaeger
 
   - name: Jaeger
     type: jaeger
     url: http://jaeger:16686
     access: proxy
+    editable: true

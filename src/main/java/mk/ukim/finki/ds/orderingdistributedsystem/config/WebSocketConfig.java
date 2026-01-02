@@ -1,4 +1,4 @@
-package mk.ukim.finki.ds.orderingdistributedsystem;
+package mk.ukim.finki.ds.orderingdistributedsystem.config;
 
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
