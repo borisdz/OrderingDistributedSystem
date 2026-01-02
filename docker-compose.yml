@@ -98,6 +98,8 @@ services:
       interval: 5s
       timeout: 30s
       retries: 5
+    networks:
+      - app-network
   redis-us-2:
     image: redis:7.4
     ports: ["6381:6379"]
@@ -106,6 +108,8 @@ services:
       interval: 5s
       timeout: 30s
       retries: 5
+    networks:
+      - app-network
   redis-eu-1:
     image: redis:7.4
     ports: ["6382:6379"]
@@ -114,6 +118,8 @@ services:
       interval: 5s
       timeout: 30s
       retries: 5
+    networks:
+      - app-network
   redis-eu-2:
     image: redis:7.4
     ports: ["6383:6379"]
@@ -122,10 +128,13 @@ services:
       interval: 5s
       timeout: 30s
       retries: 5
+    networks:
+      - app-network
   warehouse-us-1:
     build: ../WarehouseDistributedSystem
     container_name: warehouse-us-1
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-us-1:3306/inventory_us_1
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: password
@@ -148,6 +157,7 @@ services:
     build: ../WarehouseDistributedSystem
     container_name: warehouse-us-2
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-us-2:3306/inventory_us_2
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: password
@@ -170,6 +180,7 @@ services:
     build: ../WarehouseDistributedSystem
     container_name: warehouse-eu-1
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-eu:3306/inventory_eu
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: password
@@ -192,6 +203,7 @@ services:
     build: ../WarehouseDistributedSystem
     container_name: warehouse-eu-2
     environment:
+      SPRING_PROFILES_ACTIVE: docker
       SPRING_DATASOURCE_URL: jdbc:mysql://mysql-eu:3306/inventory_eu
       SPRING_DATASOURCE_USERNAME: user
       SPRING_DATASOURCE_PASSWORD: password
@@ -275,13 +287,15 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana-provisioning:/etc/grafana/provisioning
+      - ./grafana-provisioning/datasources:/etc/grafana/provisioning/datasources
+      - ./grafana-provisioning/dashboards:/etc/grafana/provisioning/dashboards
     depends_on:
       - prometheus
       - loki
       - jaeger
     networks:
       - app-network
+      - monitoring
   promtail:
     image: grafana/promtail:latest
     container_name: promtail

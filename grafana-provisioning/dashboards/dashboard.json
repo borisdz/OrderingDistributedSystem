@@ -1,0 +1,79 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "title": "Distributed Order System",
+  "uid": "distributed-orders",
+  "version": 1,
+  "panels": [
+    {
+      "title": "Order Request Rate",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{uri=\"/api/orders\"}[1m])",
+          "legendFormat": "Orders/sec",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Order Response Time (p95)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{uri=\"/api/orders\"}[5m]))",
+          "legendFormat": "p95 latency",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Messages Sent",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "expr": "sum(kafka_producer_record_send_total)",
+          "legendFormat": "Total Sent",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Kafka Consumer Lag",
+      "type": "timeseries",
+      "gridPos": { "x": 6, "y": 8, "w": 18, "h": 8 },
+      "targets": [
+        {
+          "expr": "kafka_consumer_fetch_manager_records_lag",
+          "legendFormat": "{{topic}} - {{partition}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "title": "Service Logs",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 8 },
+      "datasource": "Loki",
+      "targets": [
+        {
+          "expr": "{container=~\"ordering-system|warehouse.*\"}",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "refresh": "5s"
+}
