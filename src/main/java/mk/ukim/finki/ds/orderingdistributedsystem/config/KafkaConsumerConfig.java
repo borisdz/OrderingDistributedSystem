@@ -1,6 +1,6 @@
 package mk.ukim.finki.ds.orderingdistributedsystem.config;
 
-import mk.ukim.finki.ds.orderingdistributedsystem.events.AvailabilityCheckedEvent;
+import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.springframework.beans.factory.annotation.Value;

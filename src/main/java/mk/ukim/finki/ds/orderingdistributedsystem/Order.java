@@ -21,11 +21,13 @@ public class Order {
 
     private String customerId;
     private String customerRegion;
+    @Builder.Default
     private String status = "PENDING";
 
     @ElementCollection
     private List<OrderItem> items;
 
+    @Builder.Default
     private Instant createdAt = Instant.now();
 
 }

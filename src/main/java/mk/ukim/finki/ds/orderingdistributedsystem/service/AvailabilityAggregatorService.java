@@ -4,7 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import mk.ukim.finki.ds.orderingdistributedsystem.Order;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderRepository;
-import mk.ukim.finki.ds.orderingdistributedsystem.events.AvailabilityCheckedEvent;
+import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
 import org.springframework.stereotype.Service;
 
 import java.util.List;

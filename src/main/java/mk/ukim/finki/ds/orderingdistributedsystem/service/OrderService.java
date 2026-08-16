@@ -2,18 +2,18 @@ package mk.ukim.finki.ds.orderingdistributedsystem.service;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
-import io.opentelemetry.context.Context;
 import lombok.RequiredArgsConstructor;
+import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import mk.ukim.finki.ds.orderingdistributedsystem.CreateOrderRequest;
 import mk.ukim.finki.ds.orderingdistributedsystem.Order;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderItem;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderRepository;
-import mk.ukim.finki.ds.orderingdistributedsystem.events.OrderPlacedEvent;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.UUID;
 
 @Service
@@ -60,10 +60,15 @@ public class OrderService {
             // Publish to region-specific Kafka topic
             String topic = "order-placed." + request.customerRegion().toLowerCase();
             OrderPlacedEvent event = new OrderPlacedEvent(
+                    UUID.randomUUID().toString(),
+                    OrderPlacedEvent.CURRENT_VERSION,
+                    Instant.now(),
                     orderId,
+                    orderId,
+                    request.customerId(),
                     request.customerRegion().toLowerCase(),
                     request.items().stream()
-                            .map(i -> new OrderItem(i.getProductId(), i.getQuantity()))
+                        .map(i -> new mk.ukim.finki.ds.contracts.model.OrderItem(i.getProductId(), i.getQuantity()))
                             .toList());
 
             kafkaTemplate.send(topic, orderId, event);

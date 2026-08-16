@@ -2,7 +2,7 @@ package mk.ukim.finki.ds.orderingdistributedsystem.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import mk.ukim.finki.ds.orderingdistributedsystem.events.AvailabilityCheckedEvent;
+import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
