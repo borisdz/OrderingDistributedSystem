@@ -131,7 +131,9 @@ services:
     networks:
       - app-network
   warehouse-us-1:
-    build: ../WarehouseDistributedSystem
+    build:
+      context: ..
+      dockerfile: Warehouse-Distributed-System/Dockerfile
     container_name: warehouse-us-1
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -154,7 +156,9 @@ services:
       - monitoring
       - app-network
   warehouse-us-2:
-    build: ../WarehouseDistributedSystem
+    build:
+      context: ..
+      dockerfile: Warehouse-Distributed-System/Dockerfile
     container_name: warehouse-us-2
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -177,7 +181,9 @@ services:
       - monitoring
       - app-network
   warehouse-eu-1:
-    build: ../WarehouseDistributedSystem
+    build:
+      context: ..
+      dockerfile: Warehouse-Distributed-System/Dockerfile
     container_name: warehouse-eu-1
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -200,7 +206,9 @@ services:
       - monitoring
       - app-network
   warehouse-eu-2:
-    build: ../WarehouseDistributedSystem
+    build:
+      context: ..
+      dockerfile: Warehouse-Distributed-System/Dockerfile
     container_name: warehouse-eu-2
     environment:
       SPRING_PROFILES_ACTIVE: docker
@@ -223,7 +231,9 @@ services:
       - monitoring
       - app-network
   ordering-system:
-    build: .
+    build:
+      context: ..
+      dockerfile: OrderingDistributedSystem/Dockerfile
     container_name: ordering-system
     ports:
       - "8080:8080"
