@@ -10,6 +10,7 @@ import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
 import org.springframework.kafka.core.ConsumerFactory;
 import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.support.serializer.JsonDeserializer;
+import org.springframework.lang.NonNull;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,6 +22,7 @@ public class KafkaConsumerConfig {
     private String bootstrapServers;
 
     @Bean
+    @NonNull
     public ConsumerFactory<String, AvailabilityCheckedEvent> availabilityConsumerFactory() {
         Map<String, Object> props = new HashMap<>();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -36,10 +38,12 @@ public class KafkaConsumerConfig {
     }
 
     @Bean
+    @NonNull
     public ConcurrentKafkaListenerContainerFactory<String, AvailabilityCheckedEvent> availabilityKafkaListenerContainerFactory() {
         ConcurrentKafkaListenerContainerFactory<String, AvailabilityCheckedEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
-        factory.setConsumerFactory(availabilityConsumerFactory());
+        ConsumerFactory<? super String, ? super AvailabilityCheckedEvent> consumerFactory = availabilityConsumerFactory();
+        factory.setConsumerFactory(consumerFactory);
         return factory;
     }
 }
