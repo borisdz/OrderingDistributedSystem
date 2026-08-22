@@ -1,5 +1,6 @@
 package mk.ukim.finki.ds.orderingdistributedsystem.web;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import mk.ukim.finki.ds.orderingdistributedsystem.CreateOrderRequest;
 import mk.ukim.finki.ds.orderingdistributedsystem.service.OrderService;
@@ -20,7 +21,7 @@ public class OrderController {
     @PostMapping
     public ResponseEntity<String> createOrder(
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
-            @RequestBody CreateOrderRequest request){
+            @Valid @RequestBody CreateOrderRequest request){
         String orderId = orderService.createOrder(request, idempotencyKey);
         return ResponseEntity.accepted().body("Order accepted: " + orderId);
     }
