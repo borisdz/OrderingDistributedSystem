@@ -5,6 +5,7 @@ import io.opentelemetry.api.trace.Tracer;
 import lombok.RequiredArgsConstructor;
 import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import mk.ukim.finki.ds.orderingdistributedsystem.CreateOrderRequest;
+import mk.ukim.finki.ds.orderingdistributedsystem.KafkaTopicConfig;
 import mk.ukim.finki.ds.orderingdistributedsystem.Order;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderItem;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderRepository;
@@ -24,6 +25,7 @@ public class OrderService {
     private final KafkaTemplate<String, OrderPlacedEvent> kafkaTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final Tracer tracer;
+    private final KafkaTopicConfig kafkaTopicConfig;
 
     public record OrderStatusUpdate(String orderId, String status) {}
 
@@ -58,7 +60,7 @@ public class OrderService {
             orderRepository.save(order);
 
             // Publish to region-specific Kafka topic
-            String topic = "order-placed." + request.customerRegion().toLowerCase();
+            String topic = kafkaTopicConfig.orderPlacedTopic(request.customerRegion());
             OrderPlacedEvent event = new OrderPlacedEvent(
                     UUID.randomUUID().toString(),
                     OrderPlacedEvent.CURRENT_VERSION,
