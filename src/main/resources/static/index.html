@@ -2,33 +2,89 @@
 <html>
 <head><title>Live Order Demo</title></head>
 <body>
+<h1>Place an Order</h1>
+<form id="order-form">
+    <label>Customer ID <input id="customerId" required value="customer-1"></label><br>
+    <label>Region
+        <select id="customerRegion">
+            <option value="us">US</option>
+            <option value="eu">EU</option>
+        </select>
+    </label><br>
+    <label>Product ID <input id="productId" required value="PROD-001"></label><br>
+    <label>Quantity <input id="quantity" type="number" min="1" value="1" required></label><br>
+    <button type="submit">Submit Order</button>
+</form>
+
+<div id="error" style="color:red"></div>
 <h1>Live Order Status</h1>
+<div id="orderIdDisplay"></div>
 <div id="status">Waiting for order...</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sockjs-client/1.6.1/sockjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/stomp.js/2.3.3/stomp.min.js"></script>
 <script>
-    const socket = new SockJS('/ws');
-    const stompClient = Stomp.over(socket);
-    stompClient.connect({}, function(frame) {
-        console.log('Connected: ' + frame);
-        const urlParams = new URLSearchParams(window.location.search);
-        const orderId = urlParams.get('orderId');
-        if (!orderId) {
-            document.getElementById('status').innerHTML = '<h2>No orderId in URL</h2>';
-            return;
-        }
-        console.log('Subscribing to /topic/order/' + orderId);
-        stompClient.subscribe('/topic/order/' + orderId, function(msg) {
-            console.log('Received message:', msg.body);
-            const update = JSON.parse(msg.body);
-            document.getElementById('status').innerHTML = '<h2>' + update.status + '</h2>';
+    let stompClient = null;
+
+    function connectAndSubscribe(orderId) {
+        const socket = new SockJS('/ws');
+        stompClient = Stomp.over(socket);
+        stompClient.connect({}, function () {
+            stompClient.subscribe('/topic/order/' + orderId, function (msg) {
+                const update = JSON.parse(msg.body);
+                document.getElementById('status').innerHTML = '<h2>' + update.status + '</h2>';
+            });
+            document.getElementById('status').innerHTML = '<h2>Connected - waiting for updates...</h2>';
+        }, function () {
+            document.getElementById('status').innerHTML = '<h2>Connection lost, retrying...</h2>';
+            setTimeout(() => connectAndSubscribe(orderId), 2000);
         });
-        document.getElementById('status').innerHTML = '<h2>Connected - waiting for updates...</h2>';
-    }, function(error) {
-        console.error('STOMP error', error);
-        document.getElementById('status').innerHTML = '<h2>Connection failed</h2>';
+    }
+
+    document.getElementById('order-form').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        document.getElementById('error').textContent = '';
+
+        const body = {
+            customerId: document.getElementById('customerId').value,
+            customerRegion: document.getElementById('customerRegion').value,
+            items: [{
+                productId: document.getElementById('productId').value,
+                quantity: parseInt(document.getElementById('quantity').value, 10)
+            }]
+        };
+
+        try {
+            const response = await fetch('/api/orders', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                const errorBody = await response.json().catch(() => null);
+                document.getElementById('error').textContent = errorBody
+                        ? 'Order rejected: ' + JSON.stringify(errorBody.fieldErrors || errorBody)
+                        : 'Order rejected (status ' + response.status + ')';
+                return;
+            }
+
+            const text = await response.text();
+            const orderId = text.split(': ')[1];
+            document.getElementById('orderIdDisplay').innerHTML = '<strong>Order ID:</strong> ' + orderId;
+            document.getElementById('status').innerHTML = '<h2>ORDER_PLACED</h2>';
+            connectAndSubscribe(orderId);
+        } catch (err) {
+            document.getElementById('error').textContent = 'Network error: could not reach the ordering service.';
+        }
     });
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const existingOrderId = urlParams.get('orderId');
+    if (existingOrderId) {
+        document.getElementById('orderIdDisplay').innerHTML = '<strong>Order ID:</strong> ' + existingOrderId;
+        connectAndSubscribe(existingOrderId);
+    }
 </script>
 </body>
 </html>
