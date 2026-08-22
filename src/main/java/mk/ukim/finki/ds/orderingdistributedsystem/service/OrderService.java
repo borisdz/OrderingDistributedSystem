@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -65,7 +66,7 @@ public class OrderService {
             span.setAttribute("order.id", orderId);
 
             // Persist order
-            Order order = Order.builder()
+            Order order = Objects.requireNonNull(Order.builder()
                     .orderId(orderId)
                     .customerId(request.customerId())
                     .customerRegion(request.customerRegion().toLowerCase())
@@ -73,20 +74,23 @@ public class OrderService {
                     .items(request.items().stream()
                             .map(i -> new OrderItem(i.getProductId(), i.getQuantity()))
                             .toList())
-                    .build();
+                    .build(), "Order must not be null");
 
             orderRepository.save(order);
 
             if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-                idempotencyRepository.save(IdempotencyRecord.builder()
+                idempotencyRepository.save(Objects.requireNonNull(IdempotencyRecord.builder()
                         .idempotencyKey(idempotencyKey)
                         .orderId(orderId)
                         .payloadHash(payloadHash(request))
-                        .build());
+                        .build()));
             }
 
             // Publish to region-specific Kafka topic
-            String topic = kafkaTopicConfig.orderPlacedTopic(request.customerRegion());
+            String topic = Objects.requireNonNull(
+                    kafkaTopicConfig.orderPlacedTopic(request.customerRegion()),
+                    "Kafka topic must not be null for region: " + request.customerRegion());
+            String eventKey = Objects.requireNonNull(orderId, "Order ID must not be null");
             OrderPlacedEvent event = new OrderPlacedEvent(
                     UUID.randomUUID().toString(),
                     OrderPlacedEvent.CURRENT_VERSION,
@@ -99,7 +103,7 @@ public class OrderService {
                         .map(i -> new mk.ukim.finki.ds.contracts.model.OrderItem(i.getProductId(), i.getQuantity()))
                             .toList());
 
-            kafkaTemplate.send(topic, orderId, event);
+            kafkaTemplate.send(topic, eventKey, event);
 
             // Initial status update via WebSocket
             sendStatusUpdate(orderId, "ORDER_PLACED");

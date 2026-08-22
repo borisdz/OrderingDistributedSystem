@@ -13,6 +13,7 @@ import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Service
@@ -27,7 +28,7 @@ public class AvailabilityAggregatorService {
     private final Map<String, AggregationState> stateMap = new ConcurrentHashMap<>();
 
     public void processAvailabilityResponse(AvailabilityCheckedEvent event) {
-        String orderId = event.getOrderId();
+        String orderId = Objects.requireNonNull(event.getOrderId(), "orderId must not be null");
         Order order = orderRepository.findById(orderId).orElse(null);
         if (order == null || isTerminal(order.getStatus())) {
             log.info("Ignoring response for unknown or terminal orderId={}", orderId);
@@ -56,7 +57,7 @@ public class AvailabilityAggregatorService {
             if (!state.isTimedOut(now) || !stateMap.remove(orderId, state)) {
                 return;
             }
-            orderRepository.findById(orderId).ifPresent(order -> {
+            orderRepository.findById(Objects.requireNonNull(orderId, "orderId must not be null")).ifPresent(order -> {
                 if (!isTerminal(order.getStatus())) {
                     order.setStatus("AVAILABILITY_TIMEOUT");
                     orderRepository.save(order);
@@ -68,8 +69,8 @@ public class AvailabilityAggregatorService {
 
     private void aggregateAndNotify(String orderId, List<AvailabilityCheckedEvent> responses, Order order){
         AvailabilityCheckedEvent bestOption = responses.stream()
-                .filter(AvailabilityCheckedEvent::isAvailable)
-                .min(Comparator.comparingInt(AvailabilityCheckedEvent::getEtaHours))
+                .filter(response -> response != null && response.isAvailable())
+                .min(Comparator.comparingInt(response -> response.getEtaHours()))
                 .orElse(null);
 
         if(bestOption != null){
