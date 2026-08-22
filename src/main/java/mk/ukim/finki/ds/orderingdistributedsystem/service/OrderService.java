@@ -3,8 +3,11 @@ package mk.ukim.finki.ds.orderingdistributedsystem.service;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import mk.ukim.finki.ds.contracts.events.OrderPlacedEvent;
 import mk.ukim.finki.ds.orderingdistributedsystem.CreateOrderRequest;
+import mk.ukim.finki.ds.orderingdistributedsystem.IdempotencyRecord;
+import mk.ukim.finki.ds.orderingdistributedsystem.IdempotencyRepository;
 import mk.ukim.finki.ds.orderingdistributedsystem.KafkaTopicConfig;
 import mk.ukim.finki.ds.orderingdistributedsystem.Order;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderItem;
@@ -15,13 +18,18 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OrderService {
 
     private final OrderRepository orderRepository;
+    private final IdempotencyRepository idempotencyRepository;
     private final KafkaTemplate<String, OrderPlacedEvent> kafkaTemplate;
     private final SimpMessagingTemplate messagingTemplate;
     private final Tracer tracer;
@@ -35,7 +43,7 @@ public class OrderService {
     }
 
     @Transactional
-    public String createOrder(CreateOrderRequest request) {
+    public String createOrder(CreateOrderRequest request, String idempotencyKey) {
         Span span = tracer.spanBuilder("order-service.createOrder")
                 .setAttribute("customer.id", request.customerId())
                 .setAttribute("customer.region", request.customerRegion())
@@ -43,6 +51,16 @@ public class OrderService {
 
         String orderId;
         try (var scope = span.makeCurrent()) {
+            if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+                String payloadHash = payloadHash(request);
+                var existing = idempotencyRepository.findById(idempotencyKey);
+                if (existing.isPresent()) {
+                    if (!existing.get().getPayloadHash().equals(payloadHash)) {
+                        throw new IllegalArgumentException("Idempotency key was used with a different request");
+                    }
+                    return existing.get().getOrderId();
+                }
+            }
             orderId = UUID.randomUUID().toString();
             span.setAttribute("order.id", orderId);
 
@@ -58,6 +76,14 @@ public class OrderService {
                     .build();
 
             orderRepository.save(order);
+
+            if (idempotencyKey != null && !idempotencyKey.isBlank()) {
+                idempotencyRepository.save(IdempotencyRecord.builder()
+                        .idempotencyKey(idempotencyKey)
+                        .orderId(orderId)
+                        .payloadHash(payloadHash(request))
+                        .build());
+            }
 
             // Publish to region-specific Kafka topic
             String topic = kafkaTopicConfig.orderPlacedTopic(request.customerRegion());
@@ -86,6 +112,25 @@ public class OrderService {
             throw e;
         } finally {
             span.end();
+        }
+    }
+
+    public String createOrder(CreateOrderRequest request) {
+        return createOrder(request, null);
+    }
+
+    private String payloadHash(CreateOrderRequest request) {
+        String payload = request.customerId() + "|" + request.customerRegion().toLowerCase()
+                + "|" + request.items().stream()
+                .map(item -> item.getProductId() + ":" + item.getQuantity())
+                .reduce((left, right) -> left + "," + right)
+                .orElse("");
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(payload.getBytes(StandardCharsets.UTF_8));
+            return java.util.HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
         }
     }
 }
