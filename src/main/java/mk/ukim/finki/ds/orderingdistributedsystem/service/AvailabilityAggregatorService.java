@@ -1,16 +1,19 @@
 package mk.ukim.finki.ds.orderingdistributedsystem.service;
 
+import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import mk.ukim.finki.ds.orderingdistributedsystem.AggregationConfig;
 import mk.ukim.finki.ds.orderingdistributedsystem.Order;
 import mk.ukim.finki.ds.orderingdistributedsystem.OrderRepository;
-import mk.ukim.finki.ds.contracts.events.AvailabilityCheckedEvent;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 @Service
 @RequiredArgsConstructor
@@ -19,50 +22,54 @@ public class AvailabilityAggregatorService {
 
     private final OrderService orderService;
     private final OrderRepository orderRepository;
+    private final AggregationConfig aggregationConfig;
 
-    private final Map<String, List<AvailabilityCheckedEvent>> responseMap = new ConcurrentHashMap<>();
+    private final Map<String, AggregationState> stateMap = new ConcurrentHashMap<>();
 
-    private static final Map<String, Integer> EXPECTED_RESPONSES = Map.of(
-            "us", 2,
-            "eu", 2
-    );
-
-    public void processAvailabilityResponse(AvailabilityCheckedEvent event){
+    public void processAvailabilityResponse(AvailabilityCheckedEvent event) {
         String orderId = event.getOrderId();
-        log.info("Received availability response: orderId={}, warehouse={}, available={}",
-                orderId, event.getWarehouseRegion(), event.isAvailable());
-
-        responseMap.compute(orderId, (key, existingList)->{
-            if(existingList == null){
-                existingList = new CopyOnWriteArrayList<>();
-            }
-            existingList.add(event);
-            return existingList;
-        });
-
         Order order = orderRepository.findById(orderId).orElse(null);
-        if(order == null){
-            log.warn("Order not found: {}", orderId);
+        if (order == null || isTerminal(order.getStatus())) {
+            log.info("Ignoring response for unknown or terminal orderId={}", orderId);
             return;
         }
 
-        String region = order.getCustomerRegion();
-        int expectedCount = EXPECTED_RESPONSES.getOrDefault(region,1);
-        List<AvailabilityCheckedEvent> responses = responseMap.get(orderId);
+        int expectedCount = aggregationConfig.getExpectedResponses()
+                .getOrDefault(order.getCustomerRegion().toLowerCase(), 1);
+        AggregationState state = stateMap.computeIfAbsent(orderId,
+                id -> new AggregationState(id, expectedCount, aggregationConfig.getTimeoutSeconds()));
+        state.addResponse(event);
 
-        if(responses.size()>=expectedCount){
-            aggregateAndNotify(orderId, responses, order);
-            responseMap.remove(orderId);
-        }else{
+        if (state.isComplete()) {
+            aggregateAndNotify(orderId, state.getResponses().values().stream().toList(), order);
+            stateMap.remove(orderId, state);
+        } else {
             orderService.sendStatusUpdate(orderId,
-                    String.format("CHECKING_WAREHOUSES (%d/%d)", responses.size(), expectedCount));
+                    String.format("CHECKING_WAREHOUSES (%d/%d)", state.getResponses().size(), expectedCount));
         }
+    }
+
+    @Scheduled(fixedDelayString = "${aggregation.cleanup-interval-seconds:10}000")
+    public void cleanupTimedOutResponses() {
+        Instant now = Instant.now();
+        stateMap.forEach((orderId, state) -> {
+            if (!state.isTimedOut(now) || !stateMap.remove(orderId, state)) {
+                return;
+            }
+            orderRepository.findById(orderId).ifPresent(order -> {
+                if (!isTerminal(order.getStatus())) {
+                    order.setStatus("AVAILABILITY_TIMEOUT");
+                    orderRepository.save(order);
+                    orderService.sendStatusUpdate(orderId, "AVAILABILITY_CHECK_TIMED_OUT");
+                }
+            });
+        });
     }
 
     private void aggregateAndNotify(String orderId, List<AvailabilityCheckedEvent> responses, Order order){
         AvailabilityCheckedEvent bestOption = responses.stream()
                 .filter(AvailabilityCheckedEvent::isAvailable)
-                .min((a,b)->Integer.compare(a.getEtaHours(), b.getEtaHours()))
+                .min(Comparator.comparingInt(AvailabilityCheckedEvent::getEtaHours))
                 .orElse(null);
 
         if(bestOption != null){
@@ -84,5 +91,11 @@ public class AvailabilityAggregatorService {
 
             orderService.sendStatusUpdate(orderId, "UNAVAILABLE_IN_ALL_WAREHOUSES");
         }
+    }
+
+    private boolean isTerminal(String status) {
+        return "AVAILABLE".equals(status)
+                || "UNAVAILABLE".equals(status)
+                || "AVAILABILITY_TIMEOUT".equals(status);
     }
 }
