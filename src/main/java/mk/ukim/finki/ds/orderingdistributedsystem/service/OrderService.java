@@ -1,5 +1,7 @@
 package mk.ukim.finki.ds.orderingdistributedsystem.service;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.Tracer;
 import lombok.RequiredArgsConstructor;
@@ -35,6 +37,7 @@ public class OrderService {
     private final SimpMessagingTemplate messagingTemplate;
     private final Tracer tracer;
     private final KafkaTopicConfig kafkaTopicConfig;
+    private final MeterRegistry meterRegistry;
 
     public record OrderStatusUpdate(String orderId, String status) {}
 
@@ -103,7 +106,7 @@ public class OrderService {
                         .map(i -> new mk.ukim.finki.ds.contracts.model.OrderItem(i.getProductId(), i.getQuantity()))
                             .toList());
 
-            kafkaTemplate.send(topic, eventKey, event);
+            publishOrderPlacedEvent(topic, eventKey, event);
 
             // Initial status update via WebSocket
             sendStatusUpdate(orderId, "ORDER_PLACED");
@@ -121,6 +124,31 @@ public class OrderService {
 
     public String createOrder(CreateOrderRequest request) {
         return createOrder(request, null);
+    }
+
+    /**
+     * Publishes the event and records success/failure so silent publish failures are observable (#63).
+     */
+    private void publishOrderPlacedEvent(String topic, String key, OrderPlacedEvent event) {
+        kafkaTemplate.send(topic, key, event).whenComplete((result, exception) -> {
+            if (exception != null) {
+                log.error("Failed to publish OrderPlacedEvent: orderId={}, topic={}", event.getOrderId(), topic, exception);
+                Counter.builder("order.event.publish")
+                        .tag("topic", topic)
+                        .tag("outcome", "failure")
+                        .register(meterRegistry)
+                        .increment();
+            } else {
+                log.info("Published OrderPlacedEvent: orderId={}, topic={}, partition={}, offset={}",
+                        event.getOrderId(), topic,
+                        result.getRecordMetadata().partition(), result.getRecordMetadata().offset());
+                Counter.builder("order.event.publish")
+                        .tag("topic", topic)
+                        .tag("outcome", "success")
+                        .register(meterRegistry)
+                        .increment();
+            }
+        });
     }
 
     private String payloadHash(CreateOrderRequest request) {
