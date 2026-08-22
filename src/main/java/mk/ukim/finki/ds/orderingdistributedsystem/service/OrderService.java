@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -44,6 +45,10 @@ public class OrderService {
     public void sendStatusUpdate(String orderId, String status) {
         messagingTemplate.convertAndSend("/topic/order/" + orderId,
                 new OrderStatusUpdate(orderId, status));
+    }
+
+    public Optional<String> findOrderStatus(String orderId) {
+        return orderRepository.findById(orderId).map(Order::getStatus);
     }
 
     @Transactional
